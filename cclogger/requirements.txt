@@ -1,0 +1,9 @@
+
+#Make sure crypto is not installed. If yes then remove that then install this.
+pycrypto
+
+beautifulsoup4
+pytz==2012f
+lxml
+
+MySQL-python
