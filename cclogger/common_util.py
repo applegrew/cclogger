@@ -8,6 +8,7 @@ from functools import wraps
 from . import bottle
 from . import normalized_tz_obj, salt, cipher_key, verbose
 from . import crypt
+from .model import db 
 
 EMAIL_ID_RE = re.compile(r'\s*([^@\s]+)@([^@\s]+)\s*')
 
@@ -36,7 +37,7 @@ class ApiException(Exception):
 
 class UTCOffset(tzinfo):
     def __init__(self, utcoffset):
-        self.utc_delta = timedelta(seconds=utcoffset)
+        self.utc_delta = timedelta(minutes=int(utcoffset/60)) # Must specify in mins else Python errs out.
         self.utc_offset_str = tzoffset_sec_to_hhmm(utcoffset)
 
     def utcoffset(self, dt):
@@ -124,10 +125,22 @@ def JsonResponse(f):
     @wraps(f)
     def _inner_(*args, **kwargs):
         try:
+            db.connect()
+
             if bottle.request.method == 'GET':
                 out = f(*args, **kwargs)
             else:
-                out = f(**bottle.request.forms)
+                d = dict()
+                for k in bottle.request.forms:
+                    if k.endswith('[]'): # Handles arrays. e.g. banks[]
+                        v = bottle.request.forms.getall(k)
+                        k = k[:-2]
+                    else:
+                        v = bottle.request.forms[k]
+                    d[k] = v
+                if verbose:
+                    print 'Params:', d
+                out = f(**d)
             if out is None:
                 out = {'Status': 'OK'}
             else:
@@ -149,6 +162,8 @@ def JsonResponse(f):
                 'Code': 'UNKNOWN',
                 'Msg': str(e)
             }
+        finally:
+            db.close()
         return out
     return _inner_
 
@@ -168,6 +183,18 @@ def route_with_option(path, method):
         bottle.route(path=path, method=['OPTIONS', method], callback=_inner_)
         return _inner_
     return _wrap
+
+def catch_and_pack_parsewarning(f):
+    from .parse import ParserWarning
+
+    try:
+        warn = f()
+    except ParserWarning, w:
+        warn = w
+    if warn and isinstance(warn, ParserWarning):
+        return (True, {'Warning': unicode(warn), 'WarningCode': warn.get_code()})
+    else:
+        return (False, warn)
 
 def encrypt(data, use_salt=False):
     if use_salt:
@@ -201,5 +228,5 @@ def date_filter(config):
     return regexp, to_python, to_url
 
 def convert_url_date_to_pydate(str_date):
-    regexp, to_python, to_url = date_filter()
+    regexp, to_python, to_url = date_filter(None)
     return to_python(str_date)

@@ -15,8 +15,10 @@ class ParseHdfcSms(SmsParser):
 
     @db.commit_on_success
     def parse_sms(self, from_address, body, date, tzinfo, smsid, usermail):
-        body_pattern = re.compile(r"Thank you for using your HDFC bank CREDIT card ending \s+(?P<cc>[0-9]+)\s+ for\s+(?P<currency>[a-zA-Z.$]+)\s*(?P<amt>[0-9,.]+)\s+ in\s+(?P<city>[A-Z]*)\.\s+at\s+(?P<place>.*)\.\s+, on\s+(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2}).*")
-        m = body_pattern.search(body, re.IGNORECASE)
+        body_pattern = re.compile(
+            r"Thank you for using your HDFC bank CREDIT card ending \s+(?P<cc>[0-9]+)\s+ for\s+(?P<currency>[a-zA-Z.$]+)\s*(?P<amt>[0-9,.]+)\s+ in\s+(?P<city>[A-Z]*)\.\s+at\s+(?P<place>.*)\.\s+, on\s+(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2}).*",
+            re.IGNORECASE)
+        m = body_pattern.search(body)
         if m:
             patterns = m.groupdict()
 
@@ -35,5 +37,6 @@ class ParseHdfcSms(SmsParser):
             if verbose:
                 print 'Successfully parsed and saved alert: ', trans
             return True
+        raise ParserWarning(self.get_name(), 'BODY_PRASE_WARN', 'Could not parse sms body.')
 
 ParseHdfcSms()

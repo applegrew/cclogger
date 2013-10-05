@@ -77,7 +77,7 @@ def process_new():
     return True
 
 
-def main(): 
+def main_run(): 
     while(True):   
         try:
             if not process_new():
@@ -94,4 +94,4 @@ def main():
                 print "Reached max error threshold. Shutting down."
                 return
 
-main()
+

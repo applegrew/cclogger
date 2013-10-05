@@ -1,10 +1,9 @@
 from .model import InMailServerConfig, OutMailServerConfig, User, UserMail, UserMailMap, TransactionAlert, \
-	Place, PlaceManualPlaceMap, SmsPref
+	Place, SmsPref
 
 recreate = True
 if recreate:
 	TransactionAlert.drop_table(fail_silently=True)
-	PlaceManualPlaceMap.drop_table(fail_silently=True)
 	Place.drop_table(fail_silently=True)
 	UserMailMap.drop_table(fail_silently=True)
 	UserMail.drop_table(fail_silently=True)
@@ -20,8 +19,23 @@ SmsPref.create_table(fail_silently=True)
 UserMail.create_table(fail_silently=True)
 UserMailMap.create_table(fail_silently=True)
 Place.create_table(fail_silently=True)
-PlaceManualPlaceMap.create_table(fail_silently=True)
 TransactionAlert.create_table(fail_silently=True)
+
+d = InMailServerConfig.get_or_create(at_domain="-sms-")
+d.hostname = "-"
+d.port=0
+d.use_ssl=False
+d.save()
+q = InMailServerConfig.update(id=-1).where(InMailServerConfig.at_domain == "-sms-")
+q.execute()
+
+d = OutMailServerConfig.get_or_create(at_domain="-sms-")
+d.hostname = "-"
+d.port=0
+d.use_ssl=False
+d.save()
+q = OutMailServerConfig.update(id=-1).where(OutMailServerConfig.at_domain == "-sms-")
+q.execute()
 
 d = InMailServerConfig.get_or_create(at_domain="gmail.com")
 d.hostname = "imap.gmail.com"

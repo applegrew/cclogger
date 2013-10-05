@@ -1,0 +1,193 @@
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN"
+ "http://www.w3.org/TR/html4/strict.dtd">
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>API Tester</title>
+
+    <style type="text/css">
+        input {
+            margin-left: 10px;
+            width: 70%;
+        }
+    </style>
+
+    <script type="text/javascript" src="jquery-1.10.2.min.js" ></script>
+
+    <script type="text/javascript">
+        var connection_type;
+        function addInpBox(name, value, placeholder, data) {
+            var id = 'param_inp_' + ($('#parambox input').length + 1),
+                label = name.toLowerCase().replace(/\b[a-z]/g, function(letter) {
+                    return letter.toUpperCase();
+                });
+            value = typeof(value) === 'undefined' ? '' : value;
+            placeholder = typeof(placeholder) === 'undefined' ? '' : placeholder;
+            $('<div><label for="' + id + '">' + label + ':</label>' +
+            '<input id="' + id + '"type="text" name="' + name + '" value="' + value
+            + '" placeholder="' + placeholder + '" /></div>')
+            .appendTo('#parambox');
+            if (data)
+                $('#' + id).data(data[0], data[1]);
+        }
+
+        $(function () {
+            var xxx; // Undefined
+            var server = $('#url_prefix').val().trim();
+            $('#api').on('change', function () {
+                var opt = $(this).val();
+                if (opt === 'signup_user') {
+                    $('#parambox').empty();
+                    addInpBox('url', server + 'signup_user');
+                    addInpBox('email');
+                    addInpBox('password');
+                    addInpBox('name');
+                    connection_type = 'PUT';
+                } else if (opt === 'update_email_password') {
+                    $('#parambox').empty();
+                    addInpBox('url', server + 'update_email_password');
+                    addInpBox('email');
+                    addInpBox('new_password');
+                    connection_type = 'POST';
+                } else if (opt === 'login') {
+                    $('#parambox').empty();
+                    addInpBox('url', server + 'login');
+                    addInpBox('email');
+                    addInpBox('password');
+                    addInpBox('isEncrypted', xxx, 'Y/N');
+                    connection_type = 'POST';
+                } else if (opt === 'logout') {
+                    $('#parambox').empty();
+                    addInpBox('url', server + 'logout');
+                    addInpBox('token', $('#last_token').text());
+                    connection_type = 'POST';
+                } else if (opt === 'add_account') {
+                    $('#parambox').empty();
+                    addInpBox('url', server + 'add_account');
+                    addInpBox('token', $('#last_token').text());
+                    addInpBox('email');
+                    addInpBox('password');
+                    connection_type = 'PUT';
+                } else if (opt === 'report') {
+                    $('#parambox').empty();
+                    addInpBox('url', server + 'report/<token>/<from_date>/<to_date>/<only_totals>');
+                    addInpBox('token', $('#last_token').text());
+                    addInpBox('from_date', xxx, 'dd-mm-yy:<+/-><UTC offset in seconds>');
+                    addInpBox('to_date', xxx, 'dd-mm-yy:<+/-><UTC offset in seconds>');
+                    addInpBox('only_totals', xxx, 'Y/N');
+                    connection_type = 'GET';
+                }  else if (opt === 'user_pref_sms_addresses') {
+                    $('#parambox').empty();
+                    addInpBox('url', server + 'user_pref_sms_addresses/<token>');
+                    addInpBox('token', $('#last_token').text());
+                    connection_type = 'GET';
+                } else if (opt === 'add_sms') {
+                    $('#parambox').empty();
+                    addInpBox('url', server + 'add_sms');
+                    addInpBox('token', $('#last_token').text());
+                    addInpBox('from_address');
+                    addInpBox('body');
+                    addInpBox('date', xxx, 'dd-mm-yy:<+/-><UTC offset in seconds>');
+                    addInpBox('smsid');
+                    connection_type = 'PUT';
+                } else if (opt === 'get_sms_opt_in_for_banks') {
+                    $('#parambox').empty();
+                    addInpBox('url', server + 'sms_opt_in_for_banks/<token>');
+                    addInpBox('token', $('#last_token').text());
+                    connection_type = 'GET';
+                } else if (opt === 'sms_opt_in_for_banks') {
+                    $('#parambox').empty();
+                    addInpBox('url', server + 'sms_opt_in_for_banks');
+                    addInpBox('token', $('#last_token').text());
+                    addInpBox('banks', xxx, 'Comma delimited bank names.', ['isArray', true]);
+                    connection_type = 'POST';
+                } else {
+                    connection_type = '';
+                }
+            });
+
+            $('#fire').on('click', function () {
+                $('#result').empty();
+
+                if (connection_type) {
+                    $('#result').append('<b>Loading...</b>');
+
+                    var params = {}, url, isGet = connection_type === 'GET';
+                    $('#parambox input').each(function () {
+                        var inp = $(this), val;
+                        if (inp.attr('name') === 'url')
+                            url = inp.val();
+                        else {
+                            val = inp.val();
+                            if (inp.data('isArray')) {
+                                val = val.split(',');
+                            }
+                            params[inp.attr('name')] = val;
+                        }
+                    });
+                    if (isGet) {
+                        url = url.replace(/<[a-z_]+>/g, function (match) {
+                            match = match.substring(1, match.length - 1)
+                            if (typeof(params[match]) !== 'undefined') {
+                                return params[match];
+                            }
+                            return match;
+                        });
+                    }
+
+                    $.ajax(url, {
+                        crossDomain: true,
+                        data: isGet ? '' : params,
+                        type: connection_type,
+                        dataType: 'text'
+                    }).done(function(data, textStatus, jqXHR) {
+                        $('#result').empty().append('<pre>' + data + '</pre>');
+                        json = JSON.parse(data);
+                        if (json && json.Token) {
+                            $('#last_token').empty().append(json.Token);
+                        }
+                    });
+                }
+            });
+        });
+    </script>
+</head>
+<body>
+	
+<div>
+    <select id="api">
+        <option value="---">-- Select an API --</option>
+        <option value="signup_user">signup_user</option>
+        <option value="update_email_password">update_email_password</option>
+        <option value="login">login</option>
+        <option value="logout">logout</option>
+        <option value="add_account">add_account</option>
+        <option value="report">report</option>
+        <option value="user_pref_sms_addresses">user_pref_sms_addresses</option>
+        <option value="get_sms_opt_in_for_banks">get_sms_opt_in_for_banks</option>
+        <option value="sms_opt_in_for_banks">sms_opt_in_for_banks</option>
+        <option value="add_sms">add_sms</option>
+    </select>
+
+
+    <div>
+        <label for="url_prefix">Url prefix:</label>
+        <input id="url_prefix" type="text" name="url_prefix" value="http://localhost:9000/" placeholder="Must end with /" />
+    </div>
+    <div id="parambox"></div>
+
+    <div>
+        <button id="fire">Fire!</button>
+    </div>
+
+    <div id="result"></div>
+    <div>
+        <div><br/><br/><b>Last Token:-</b></div>
+        <div id="last_token"></div>
+    </div>
+</div>
+	
+</body>
+</html>

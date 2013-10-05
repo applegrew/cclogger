@@ -1,12 +1,12 @@
 import imaplib
 
 from .common_util import JsonResponse, get_at_domain, ApiException, encrypt, route_with_option, is_valid_email, \
-    convert_url_date_to_pydate
+    convert_url_date_to_pydate, catch_and_pack_parsewarning
 from .client import MailClient
 from .model import User, UserMail, InMailServerConfig, OutMailServerConfig, UserMailMap, TransactionAlert, Place, \
-    PlaceManualPlaceMap, SmsPref, db
+    SmsPref, db
 from .bottlesession import PickleSession
-from .peewee import fn
+from .peewee import fn, JOIN_LEFT_OUTER
 from .parse import SmsParseCentral
 
 session_manager = PickleSession()
@@ -190,19 +190,24 @@ def report(token, from_date, to_date, only_totals, **kwargs):
         res[t.card_no] = card_details
 
     if not only_totals:
+        ManualPlace = Place.alias()
+        #p = Place.select(Place.id, fn.Ifnull(ManualPlace.place_name, Place.place_name).alias('place_name'),fn.Ifnull(ManualPlace.kind, Place.kind).alias('kind')).join(ManualPlace, join_type=JOIN_LEFT_OUTER, on=(Place.equivalent_manual_place == ManualPlace.id))
 
         for t in TransactionAlert.select(
-            TransactionAlert.card_no, TransactionAlert.currency, TransactionAlert.place,
-            fn.Sum(TransactionAlert.amt).alias('total_amt')) \
+            TransactionAlert.card_no, TransactionAlert.currency, fn.Ifnull(ManualPlace.place_name, Place.place_name).alias('place_name'),
+            fn.Ifnull(ManualPlace.kind, Place.kind).alias('kind'), fn.Sum(TransactionAlert.amt).alias('total_amt')) \
+            .dicts() \
+            .join(Place) \
+            .join(ManualPlace, join_type=JOIN_LEFT_OUTER, on=(Place.equivalent_manual_place == ManualPlace.id)) \
             .where((TransactionAlert.user_mail << usermails) & (TransactionAlert.date >= from_date) & (TransactionAlert.date <= to_date)) \
-            .group_by(TransactionAlert.card_no, TransactionAlert.currency, TransactionAlert.place):
+            .group_by(TransactionAlert.card_no, TransactionAlert.currency, fn.Ifnull(ManualPlace.place_name, Place.place_name)):
 
-            card_details = res.get(t.card_no, dict())
+            card_details = res.get(t['card_no'], dict())
             places = card_details.get('Places', [])
 
-            places.append({'Currency': t.currency, 'Amt': t.total_amt, 'Place': t.place.place_name, 'Kind': t.place.kind})
+            places.append({'Currency': t['currency'], 'Amt': t['total_amt'], 'Place': t['place_name'], 'Kind': t['kind']})
             card_details['Places'] = places
-            res[t.card_no] = card_details
+            res[t['card_no']] = card_details
 
         for t in TransactionAlert.select(
             TransactionAlert.card_no, TransactionAlert.currency, Place.kind, fn.Sum(TransactionAlert.amt).alias('total_amt')) \
@@ -252,7 +257,9 @@ def add_sms(token, from_address, body, date, smsid, **kwargs):
         usersms = sq.get()
     else:
         with db.transaction():
-            usersms = UserMail.create(email=uuid.uuid4(), password="-", is_dummy=True, is_sms=True)
+            usersms = UserMail.create(email=uuid.uuid4(), password="-", is_dummy=True, is_sms=True,
+                in_mail_config=InMailServerConfig.get(id=-1),
+                out_mail_config=OutMailServerConfig.get(id=-1))
             UserMailMap.create(user=user, user_mail=usersms)
 
     if TransactionAlert.select().where((TransactionAlert.user_mail == usersms) & (TransactionAlert.uid == smsid)).exists():
@@ -262,8 +269,12 @@ def add_sms(token, from_address, body, date, smsid, **kwargs):
             })
         raise a
     else:
-        SmsParseCentral.getInstance().parse_sms(from_address, body, date, date.tzinfo, smsid, usersms)
-        return {'Smsid': smsid}
+        has_warning, d = catch_and_pack_parsewarning(
+            lambda: SmsParseCentral.getInstance().parse(from_address, body, date, date.tzinfo, smsid, usersms))
+        out = {'Smsid': smsid}
+        if has_warning:
+            out = dict(out.items() + d.items())
+        return out
 
 @route_with_option('/user_pref_sms_addresses/<token>', 'GET')
 @JsonResponse
@@ -349,7 +360,7 @@ def sms_opt_in_for_banks(token, banks, **kwargs):
         pref.user = user
 
     pref.set_addresses(SmsParseCentral.getInstance().get_addresses_for_parser_names(banks))
-    perf.save()
+    pref.save()
     
 @route_with_option('/add_reference_accounts', 'PUT')
 @JsonResponse

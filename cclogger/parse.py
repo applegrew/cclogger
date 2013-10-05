@@ -3,9 +3,9 @@ import re
 from . import verbose
 from .common_util import ApiException
 
-class ParserException(Exception):
+class ParserWarning(Exception):
     def __init__(self, tag, code, msg, cc_no=None):
-        super(ParserException, self).__init__(msg)
+        super(ParserWarning, self).__init__(msg)
         self.cc_no = cc_no if cc_no is not None else ''
         self.code = code
         self.msg = msg
@@ -25,6 +25,9 @@ class ParserException(Exception):
 
     def __unicode__(self):
         return u'%s [%s][%s]: %s' % (self.get_tag(), self.get_code(), self.get_card_no(), self.get_msg())
+
+class ParserException(ParserWarning):
+    pass
 
 class BaseParseCentral(object):
     INSTANCE = None
@@ -126,6 +129,8 @@ class SmsParseCentral(BaseParseCentral):
                     'Smsid': smsid
                     })
                 raise a
+            except ParserWarning, w:
+                return w
         else:
             if verbose:
                 print 'No parser found for from_address: ', from_address

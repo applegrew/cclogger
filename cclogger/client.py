@@ -16,6 +16,12 @@ from . import verbose, info, timeout, max_clients_pool, server_email, server_mai
 HTML_TAGS_RE = re.compile(r"</?[^<>]+>")
 HTML_NEWLINE_RE = re.compile(r"<\s*br\s*/?>|<\s*tr\s*/?>", flags=re.IGNORECASE)
 
+if False: # Use proxy quick hack.
+    import socks
+    import socket
+    socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS4, '148.87.19.20', 80, True)
+    socket.socket = socks.socksocket
+
 def retryableCall(f, retries, delay, client):
     while True:
         try:

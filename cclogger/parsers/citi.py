@@ -1,7 +1,7 @@
 import re
 from bs4 import BeautifulSoup
 
-from ..parse import AlertMailParser, ParserException, SmsParser
+from ..parse import AlertMailParser, ParserException, ParserWarning, SmsParser
 from ..model import TransactionAlert, Place, db
 from ..common_util import date_str_to_datetime, convert_month_abbr_to_digits, make_float, normalize_place_name
 from .. import verbose
@@ -19,16 +19,18 @@ class ParseCitiIndiaAlert(AlertMailParser):
         subject = subject.lower()
     	soup = BeautifulSoup(body)
 
-        subject_pattern = re.compile(r"\s*Transaction confirmation on your Citibank credit card\s*".lower())
-        m = subject_pattern.match(subject, re.IGNORECASE)
+        subject_pattern = re.compile(r"\s*Transaction confirmation on your Citibank credit card\s*".lower(), re.IGNORECASE)
+        m = subject_pattern.match(subject)
         if m:
-            pattern = re.compile(r"(?P<currency>[a-zA-Z.$]+)\s*(?P<amt>[0-9,.]+)\s+was spent on your Credit Card\s+(?P<cc>[0-9X]+)\s+on\s+(?P<date>[0-9]{1,2}-[A-Z]{3}-[0-9]{2})\s+at\s+(?P<place>.*)\.\s+")
-            m = pattern.search(soup.find(text=pattern), re.IGNORECASE)
+            pattern = re.compile(
+                r"(?P<currency>[a-zA-Z.$]+)\s*(?P<amt>[0-9,.]+)\s+was spent on your Credit Card\s+(?P<cc>[0-9X]+)\s+on\s+(?P<date>[0-9]{1,2}-[A-Z]{3}-[0-9]{2})\s+at\s+(?P<place>.*)\.\s+",
+                re.IGNORECASE)
+            m = pattern.search(soup.find(text=pattern))
             if m:
             	patterns = m.groupdict()
 
-                pattern = re.compile(r"Reference\s*No:\s*(?P<refid>[0-9A-Za-z-]+)")
-                m = pattern.search(soup.find(text=pattern), re.IGNORECASE)
+                pattern = re.compile(r"Reference\s*No:\s*(?P<refid>[0-9A-Za-z-]+)", re.IGNORECASE)
+                m = pattern.search(soup.find(text=pattern))
                 refid = m.groupdict()['refid']
 
             	place_name = normalize_place_name(patterns['place'])
@@ -53,8 +55,8 @@ class ParseCitiIndiaAlert(AlertMailParser):
         subject_pattern = re.compile(r"\s*Cancellation of transaction on your Citibank credit card\s*".lower())
         m = subject_pattern.match(subject)
         if m:
-            pattern = re.compile(r"Reference\s*No:\s*(?P<refid>[0-9A-Za-z-]+)")
-            m = pattern.search(soup.find(text=pattern), re.IGNORECASE)
+            pattern = re.compile(r"Reference\s*No:\s*(?P<refid>[0-9A-Za-z-]+)", re.IGNORECASE)
+            m = pattern.search(soup.find(text=pattern))
             if m:
                 patterns = m.groupdict()
                 refid = patterns['refid']
@@ -77,15 +79,17 @@ class ParseCitiIndiaAlert(AlertMailParser):
 class ParseCitiIndiaSms(SmsParser):
 
     def get_from_addresses_to_track(self):
-        return ['LM-Citibk',]
+        return ['LM-Citibk', 'DZ-Citibk',]
 
     def get_name(self):
         return 'Citi Bank'
 
     @db.commit_on_success
     def parse_sms(self, from_address, body, date, tzinfo, smsid, usermail):
-        body_pattern = re.compile(r"(?P<currency>[a-zA-Z.$]+)\s*(?P<amt>[0-9,.]+)\s+was spent on your Credit Card\s+(?P<cc>[0-9X]+)\s+on\s+(?P<date>[0-9]{1,2}-[A-Z]{3}-[0-9]{2})\s+at\s+(?P<place>.*)\.\s+")
-        m = body_pattern.search(body, re.IGNORECASE)
+        body_pattern = re.compile(
+            r"(?P<currency>[a-zA-Z.$]+)\s*(?P<amt>[0-9,.]+)\s+was spent on your Credit Card\s+(?P<cc>[0-9X]+)\s+on\s+(?P<date>[0-9]{1,2}-[A-Z]{3}-[0-9]{2})\s+at\s+(?P<place>.+)\s*\.\s*",
+            re.IGNORECASE)
+        m = body_pattern.search(body)
         if m:
             patterns = m.groupdict()
 
@@ -105,6 +109,7 @@ class ParseCitiIndiaSms(SmsParser):
             if verbose:
                 print 'Successfully parsed and saved alert: ', trans
             return True
+        raise ParserWarning(self.get_name(), 'BODY_PRASE_WARN', 'Could not parse sms body.')
 
 ParseCitiIndiaAlert()
 ParseCitiIndiaSms()

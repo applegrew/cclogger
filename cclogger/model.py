@@ -52,7 +52,7 @@ class SmsPref(BaseModel):
         else:
             return None
     def set_addresses(self, arr_address):
-        self.addresses = arr_address.join('`')
+        self.addresses = '`'.join(arr_address)
 
     def __unicode__(self):
         return u"%s => %s" % (self.name, self.addresses)
@@ -91,20 +91,19 @@ class UserMailMap(BaseModel):
             )
 
 class Place(BaseModel):
-    place_name = peewee.CharField(db_index=True, max_length=300)
-    kind = peewee.CharField(db_index=True, max_length=200, default='Unknown')
+    place_name = peewee.CharField(max_length=300)
+    kind = peewee.CharField(max_length=200, default='Unknown')
     is_manual_generated = peewee.BooleanField(default=False) # If True this record is created manually so same place in different rows can be clubbed together.
+    equivalent_manual_place = peewee.ForeignKeyField('self', null=True)
 
     def __unicode__(self):
         return self.place_name
 
-class PlaceManualPlaceMap(BaseModel):
-    "Maps an auto generated Place to manual generated Place."
-    auto_place = peewee.ForeignKeyField(Place, unique=True, cascade=True, related_name="auto_places")
-    manual_place = peewee.ForeignKeyField(Place, db_index=True, cascade=True, related_name="manual_places")
-
-    def __unicode__(self):
-        return u"%s => %s" % (self.auto_place, self.manual_place)
+    class Meta:
+        indexes = (
+            (('place_name', 'is_manual_generated'), False),
+            (('kind', 'is_manual_generated'), False),
+            )
 
 class TransactionAlert(BaseModel):
     user_mail = peewee.ForeignKeyField(UserMail, cascade=True)
